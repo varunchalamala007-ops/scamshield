@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ScamShield: private scam message detector</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f1f4f2;--card:#fff;--ink:#16231f;--mut:#5b6b65;--line:#d5ddd9;--red:#c8321e;--redbg:#fbd9d2;--amb:#b87500;--grn:#1e7a4d;--acc:#16231f}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101815;--card:#18231f;--ink:#e8f0ec;--mut:#9bada5;--line:#2c3a35;--red:#ff7a63;--redbg:#4a2119;--amb:#f0b34a;--grn:#5fd49a;--acc:#e8f0ec}}
+:root[data-theme="dark"]{--bg:#101815;--card:#18231f;--ink:#e8f0ec;--mut:#9bada5;--line:#2c3a35;--red:#ff7a63;--redbg:#4a2119;--amb:#f0b34a;--grn:#5fd49a;--acc:#e8f0ec}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.55 "Bricolage Grotesque",system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:clamp(2rem,6vw,3.2rem);line-height:1.05;margin:8px 0 10px;font-weight:800;letter-spacing:-.02em}
+p.lead{color:var(--mut);max-width:60ch;margin:0 0 20px}
+nav{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+nav button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;border-radius:8px;cursor:pointer}
+nav button[aria-selected=true],.btn.p{background:var(--acc);color:var(--bg);border-color:var(--acc)}
+button:focus-visible,textarea:focus-visible{outline:3px solid var(--amb);outline-offset:2px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+textarea{width:100%;min-height:130px;font:inherit;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);resize:vertical}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.meter{height:14px;border-radius:7px;background:var(--line);overflow:hidden;margin:8px 0}
+.meter i{display:block;height:100%;width:0;transition:width .5s,background .3s}
+.verdict{font-size:1.5rem;font-weight:800}
+.hl{background:var(--redbg);color:var(--red);border-radius:3px;padding:0 2px;font-weight:600}
+.msg{white-space:pre-wrap;word-break:break-word;font-size:1.05rem}
+.tag{display:inline-block;border:1px solid var(--red);color:var(--red);border-radius:6px;padding:2px 9px;margin:0 6px 6px 0;font-size:.9rem}
+ul{padding-left:20px;margin:6px 0}
+.hide{display:none}
+.mut{color:var(--mut);font-size:.92rem}
+pre{white-space:pre-wrap;font:inherit;margin:0}
+.scroll{overflow-x:auto}
+@media(prefers-reduced-motion:reduce){.meter i{transition:none}}
+</style></head>
+<body><main>
+<h1>ScamShield</h1>
+<p class="lead">Paste a text, email, or voicemail transcript you are unsure about. ScamShield tells you if it looks like a scam and shows the exact words that gave it away. Everything runs in your browser; nothing is uploaded.</p>
+<nav role="tablist">
+<button role="tab" aria-selected="true" data-t="demo">Check a message</button>
+<button role="tab" aria-selected="false" data-t="how">How it works</button>
+<button role="tab" aria-selected="false" data-t="sub">Devpost text</button>
+</nav>
+
+<section id="demo">
+<div class="card">
+<label for="inp"><b>Message to check</b></label>
+<textarea id="inp" placeholder="Paste a message here..."></textarea>
+<div class="row">
+<button class="btn p" id="go">Check message</button>
+<button class="btn" data-ex="0">Try: package text</button>
+<button class="btn" data-ex="1">Try: grandchild call</button>
+<button class="btn" data-ex="2">Try: real message</button>
+</div></div>
+<div class="card hide" id="out" aria-live="polite">
+<div class="verdict" id="vd"></div>
+<div class="meter"><i id="bar"></i></div>
+<div class="mut" id="sc"></div>
+<h3 style="margin:14px 0 6px">What gave it away</h3>
+<div class="msg" id="msg"></div>
+<h3 style="margin:14px 0 6px">Tactics found</h3>
+<div id="tags"></div>
+<h3 style="margin:14px 0 6px">What to do</h3>
+<ul id="adv"></ul>
+</div>
+</section>
+
+<section id="how" class="hide">
+<div class="card"><h3 style="margin-top:0">Two models, one answer</h3>
+<p><b>1. A Naive Bayes classifier, trained in your browser.</b> When the page loads it learns from labeled scam and normal messages, counting how often each word appears in each class with Laplace smoothing. For any new message it adds up log-odds per word. Words that push the total toward "scam" are the ones highlighted in red, so the model explains itself.</p>
+<p><b>2. A tactic detector.</b> Pattern rules look for the six pressure tactics scammers rely on: urgency, money or gift cards, impersonating a trusted organization, secrecy, links, and requests for codes or passwords.</p>
+<p><b>Final score</b> = 60% classifier probability + 40% tactic evidence. Blending keeps the score sensible even for wording the small training set has not seen.</p>
+<p class="mut">Why local? People who get scam messages are often older or less tech-confident, and the messages contain private details. Running offline means no account, no cost, and no data leaves the device.</p>
+<p class="mut">Limits: the demo is trained on a small hand-written set. Next steps are a larger multilingual dataset, a browser extension, and a family-sharing mode that alerts a trusted contact.</p></div>
+</section>
+
+<section id="sub" class="hide">
+<div class="card"><div class="row" style="margin:0 0 10px"><button class="btn p" id="cp">Copy text</button></div>
+<div class="scroll"><pre id="dev">**Project title:** ScamShield
+
+**Problem statement:** Scam texts and emails cost people billions each year. Older adults, new immigrants, and first-time phone users are hit hardest, and most free tools just say "spam" without explaining why, so people do not learn to spot the next one.
+
+**Solution overview:** ScamShield is a private, in-browser scam message checker. The user pastes a suspicious message and gets a risk score, the exact words that triggered it, the pressure tactics being used, and clear next steps.
+
+**Key features:**
+- Naive Bayes text classifier trained on-device at page load
+- Word-level highlighting of the evidence behind the score
+- Detection of six manipulation tactics: urgency, money/gift cards, impersonation, secrecy, suspicious links, credential requests
+- Plain-language advice matched to the tactics found
+- 100% offline: no uploads, no accounts, no cost
+
+**Technologies used:** JavaScript, a from-scratch Naive Bayes implementation with Laplace smoothing, regex-based feature rules, HTML/CSS.
+
+**Target users:** Older adults, families who want to protect them, and anyone who gets unexpected texts, emails, or calls asking for money or codes.
+
+**Impact:** Teaches people why a message is risky, so the skill carries over to new scams. Works on any device with a browser, including low-cost phones.
+
+**Team:** Solo submission.</pre></div></div>
+</section>
+</main>
+<script>
+const SCAM=["urgent your package could not be delivered pay the small fee at this link now","final notice your account is suspended verify your password immediately click here","you have won a prize claim your reward now send a processing fee","irs warrant issued pay today with gift cards or you will be arrested","grandma it is me i am in jail please send bitcoin and dont tell mom","your bank detected suspicious activity confirm your login code to avoid closure","congratulations you were selected for a free gift card click the link to claim","microsoft support detected a virus call now and allow remote access","wire transfer needed today keep this confidential i am in a meeting","your social security number is suspended press 1 to speak to an agent","limited time offer act now invest in crypto and double your money guaranteed","dear customer your payment failed update your card details at this link within 24 hours","this is your boss buy gift cards right now and send me the codes secretly","unusual sign in detected verify your identity or your account will be locked","tax refund waiting submit your bank details here to receive it","you owe a toll fee pay now to avoid a late penalty"];
+const SAFE=["hey are you still coming to dinner on friday let me know","your appointment is confirmed for tuesday at 3 pm see you then","thanks for the notes from class i will review them tonight","can you pick up milk on the way home","the meeting moved to 2 pm in the conference room","happy birthday hope you have a great day with the family","here is the report we discussed i attached the final version","your order has shipped and will arrive on thursday track it in the app","reminder that rent is due on the first as usual","did you see the game last night it was amazing","mom called she says dinner is at six on sunday","the library book you reserved is ready for pickup","great job on the presentation today the team loved it","i will be ten minutes late traffic is heavy","please find the lecture slides for next week attached","let us grab coffee tomorrow if you are free"];
+const tok=s=>(s.toLowerCase().match(/[a-z']+/g)||[]).filter(w=>w.length>2);
+const cnt={s:{},h:{}},tot={s:0,h:0},V=new Set();
+function train(a,c){a.forEach(t=>tok(t).forEach(w=>{cnt[c][w]=(cnt[c][w]||0)+1;tot[c]++;V.add(w)}))}
+train(SCAM,"s");train(SAFE,"h");
+const lp=(w,c)=>Math.log(((cnt[c][w]||0)+1)/(tot[c]+V.size+1));
+const TACT=[
+["Fake urgency",/urgent|immediately|right now|within \d+ hours|final notice|act now|today|suspended|locked|expires?/i,"Real organizations rarely demand action in minutes. Pause before doing anything."],
+["Money or gift cards",/gift card|wire|bitcoin|crypto|western union|processing fee|\bfee\b|\bprize\b|you (have )?won|refund/i,"Gift cards, crypto, and wire transfers cannot be reversed. No honest agency asks for them."],
+["Pretends to be someone you trust",/\birs\b|bank|amazon|usps|fedex|microsoft|apple|police|social security|boss|grandma|grandpa|mom|dad|support/i,"Contact that person or company yourself using a number from their official website or your contacts."],
+["Asks for secrecy",/don'?t tell|keep (this|it) (secret|confidential|between)|confidential|secretly/i,"Secrecy is how scammers stop you from getting a second opinion. Tell someone you trust."],
+["Suspicious link",/https?:\/\/|www\.|bit\.ly|click (here|the link)|at this link/i,"Do not tap the link. Type the official website address yourself instead."],
+["Wants codes or passwords",/password|passcode|\botp\b|login code|verification code|\bssn\b|card (number|details)|bank details|verify your (identity|account)|press 1/i,"Never share one-time codes or passwords. Legitimate staff will not ask for them."]];
+const EX=["USPS: Your package could not be delivered. Urgent: pay the $1.99 redelivery fee at http://usps-track.example/pay within 24 hours or it will be returned.","Grandma it's me, I'm in trouble and in jail. Please don't tell Mom. Buy gift cards right now and send me the codes. I'll explain later.","Hi! Your appointment with Dr. Lee is confirmed for Tuesday at 3 pm. Reply C to confirm or call the office if you need to reschedule."];
+const $=id=>document.getElementById(id);
+function analyze(text){
+ const ws=tok(text);let ls=Math.log(.5),lh=Math.log(.5);const ctr={};
+ ws.forEach(w=>{const a=lp(w,"s"),b=lp(w,"h");ls+=a;lh+=b;ctr[w]=a-b});
+ const nb=1/(1+Math.exp(lh-ls));
+ const hits=TACT.filter(t=>t[1].test(text));
+ const rule=Math.min(1,hits.length*.3);
+ return{score:Math.round((.6*nb+.4*rule)*100),hits,ctr,nb:Math.round(nb*100)};
+}
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+function run(){
+ const t=$("inp").value.trim();
+ if(!t){$("out").classList.add("hide");$("inp").focus();return}
+ const r=analyze(t),s=r.score;
+ const lvl=s>=60?["Likely a scam","var(--red)"]:s>=35?["Be careful","var(--amb)"]:["Looks safe","var(--grn)"];
+ $("out").classList.remove("hide");
+ $("vd").textContent=lvl[0];$("vd").style.color=lvl[1];
+ $("bar").style.width=s+"%";$("bar").style.background=lvl[1];
+ $("sc").textContent="Risk score "+s+"/100. Classifier said "+r.nb+"% scam; "+r.hits.length+" of 6 tactics found.";
+ $("msg").innerHTML=esc(t).replace(/[A-Za-z']+/g,w=>(w.length>2&&(r.ctr[w.toLowerCase()]||0)>0.8)?'<span class="hl">'+w+'</span>':w);
+ $("tags").innerHTML=r.hits.length?r.hits.map(h=>'<span class="tag">'+h[0]+'</span>').join(""):'<span class="mut">No pressure tactics found.</span>';
+ const adv=r.hits.map(h=>h[2]);
+ if(s>=35)adv.push("When in doubt, do not reply. Ask a family member or call the organization directly.");
+ else adv.push("Nothing alarming here. Still, never share codes or passwords over text.");
+ $("adv").innerHTML=adv.map(a=>"<li>"+a+"</li>").join("");
+}
+$("go").onclick=run;
+document.querySelectorAll("[data-ex]").forEach(b=>b.onclick=()=>{$("inp").value=EX[b.dataset.ex];run()});
+document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{
+ document.querySelectorAll("[data-t]").forEach(x=>x.setAttribute("aria-selected",x===b));
+ ["demo","how","sub"].forEach(id=>$(id).classList.toggle("hide",id!==b.dataset.t))});
+$("cp").onclick=()=>{const t=$("dev").textContent;try{navigator.clipboard.writeText(t);$("cp").textContent="Copied"}catch(e){const r=document.createRange();r.selectNodeContents($("dev"));getSelection().removeAllRanges();getSelection().addRange(r);$("cp").textContent="Selected: press copy"}};
+</script></body></html>
